@@ -151,7 +151,7 @@ class nnUNetTrainer(object):
         self.num_val_iterations_per_epoch = 50
         self.num_epochs = 1000
         self.current_epoch = 0
-        self.enable_deep_supervision = True
+        self.enable_deep_supervision = False
 
         ### Dealing with labels/regions
         self.label_manager = self.plans_manager.get_label_manager(dataset_json)
@@ -162,7 +162,8 @@ class nnUNetTrainer(object):
         self.network = None  # -> self.build_network_architecture()
         self.optimizer = self.lr_scheduler = None  # -> self.initialize
         self.grad_scaler = GradScaler() if self.device.type == 'cuda' else None
-        self.loss = None  # -> self.initialize
+        self.segLoss = None  # -> self.initialize
+        self.classLoss = None # -> self.initialize
 
         ### Simple logging. Don't take that away from me!
         # initialize log file. This is just our log for the print statements etc. Not to be confused with lightning
@@ -226,7 +227,7 @@ class nnUNetTrainer(object):
                 self.network = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.network)
                 self.network = DDP(self.network, device_ids=[self.local_rank])
 
-            self.loss = self._build_loss()
+            self.segLoss, self.classLoss  = self._build_loss()
             # torch 2.2.2 crashes upon compiling CE loss
             # if self._do_i_compile():
             #     self.loss = torch.compile(self.loss)
@@ -387,40 +388,15 @@ class nnUNetTrainer(object):
             self.oversample_foreground_percent = oversample_percent
 
     def _build_loss(self):
-        if self.label_manager.has_regions:
-            loss = DC_and_BCE_loss({},
-                                   {'batch_dice': self.configuration_manager.batch_dice,
-                                    'do_bg': True, 'smooth': 1e-5, 'ddp': self.is_ddp},
-                                   use_ignore_label=self.label_manager.ignore_label is not None,
-                                   dice_class=MemoryEfficientSoftDiceLoss)
-        else:
-            loss = DC_and_CE_loss({'batch_dice': self.configuration_manager.batch_dice,
-                                   'smooth': 1e-5, 'do_bg': False, 'ddp': self.is_ddp}, {}, weight_ce=1, weight_dice=1,
-                                  ignore_label=self.label_manager.ignore_label, dice_class=MemoryEfficientSoftDiceLoss)
+        segLoss = DC_and_BCE_loss({},
+                            {'batch_dice': self.configuration_manager.batch_dice,
+                            'do_bg': True, 'smooth': 1e-5, 'ddp': self.is_ddp},
+                            use_ignore_label=self.label_manager.ignore_label is not None,
+                            dice_class=MemoryEfficientSoftDiceLoss)
 
-        if self._do_i_compile():
-            loss.dc = torch.compile(loss.dc)
+        classLoss = nn.CrossEntropyLoss()
 
-        # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
-        # this gives higher resolution outputs more weight in the loss
-
-        if self.enable_deep_supervision:
-            deep_supervision_scales = self._get_deep_supervision_scales()
-            weights = np.array([1 / (2 ** i) for i in range(len(deep_supervision_scales))])
-            if self.is_ddp and not self._do_i_compile():
-                # very strange and stupid interaction. DDP crashes and complains about unused parameters due to
-                # weights[-1] = 0. Interestingly this crash doesn't happen with torch.compile enabled. Strange stuff.
-                # Anywho, the simple fix is to set a very low weight to this.
-                weights[-1] = 1e-6
-            else:
-                weights[-1] = 0
-
-            # we don't use the lowest 2 outputs. Normalize weights so that they sum to 1
-            weights = weights / weights.sum()
-            # now wrap the loss
-            loss = DeepSupervisionWrapper(loss, weights)
-
-        return loss
+        return segLoss, classLoss
 
     def configure_rotation_dummyDA_mirroring_and_inital_patch_size(self):
         """
@@ -978,6 +954,7 @@ class nnUNetTrainer(object):
     def train_step(self, batch: dict) -> dict:
         data = batch['data']
         target = batch['target']
+        classTarget = batch['classTarget']
 
         data = data.to(self.device, non_blocking=True)
         if isinstance(target, list):
@@ -991,9 +968,9 @@ class nnUNetTrainer(object):
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
         with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
-            output = self.network(data)
+            segOutput, classOutput = self.network(data)
             # del data
-            l = self.loss(output, target)
+            l = self.segLoss(segOutput, target) + self.classLoss(classOutput, classTarget)
 
         if self.grad_scaler is not None:
             self.grad_scaler.scale(l).backward()
@@ -1025,6 +1002,7 @@ class nnUNetTrainer(object):
     def validation_step(self, batch: dict) -> dict:
         data = batch['data']
         target = batch['target']
+        classTarget = batch['classTarget']
 
         data = data.to(self.device, non_blocking=True)
         if isinstance(target, list):
@@ -1037,9 +1015,9 @@ class nnUNetTrainer(object):
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
         with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
-            output = self.network(data)
+            segOutput, classOutput = self.network(data)
             del data
-            l = self.loss(output, target)
+            l = self.segLoss(segOutput, target) + self.classLoss(classOutput, classTarget)
 
         # we only need the output with the highest output resolution (if DS enabled)
         if self.enable_deep_supervision:

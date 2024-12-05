@@ -12,6 +12,7 @@ class nnUNetDataLoader2D(nnUNetDataLoaderBase):
         # preallocate memory for data and seg
         data_all = np.zeros(self.data_shape, dtype=np.float32)
         seg_all = np.zeros(self.seg_shape, dtype=np.int16)
+        class_all = np.zeros(self.seg_shape[:2], dtype=np.int16)
         case_properties = []
 
         for j, current_key in enumerate(selected_keys):
@@ -20,6 +21,9 @@ class nnUNetDataLoader2D(nnUNetDataLoaderBase):
             force_fg = self.get_do_oversample(j)
             data, seg, properties = self._data.load_case(current_key)
             case_properties.append(properties)
+
+            #note down classifier label
+            class_all[j] = int(current_key.split('_')[1])
 
             # select a class/region first, then a slice where this class is present, then crop to that area
             if not force_fg:
@@ -109,13 +113,12 @@ class nnUNetDataLoader2D(nnUNetDataLoaderBase):
                         seg_all = torch.stack(segs)
                     del segs, images
 
-            return {'data': data_all, 'target': seg_all, 'keys': selected_keys}
-
-        return {'data': data_all, 'target': seg_all, 'keys': selected_keys}
+            return {'data': data_all, 'target': seg_all, 'classTarget': class_all, 'keys': selected_keys}
+        return {'data': data_all, 'target': seg_all, 'classTarget': class_all, 'keys': selected_keys}
 
 
 if __name__ == '__main__':
-    folder = '/media/fabian/data/nnUNet_preprocessed/Dataset004_Hippocampus/2d'
+    folder = '/home/david/pancreas-cancer-segmentation/data_preprocessed/Dataset011_Pancreas/nnUNetPlans_2d'
     ds = nnUNetDataset(folder, None, 1000)  # this should not load the properties!
-    dl = nnUNetDataLoader2D(ds, 366, (65, 65), (56, 40), 0.33, None, None)
+    dl = nnUNetDataLoader2D(ds, 16, (65, 65), (56, 40), 0.33, None, None)
     a = next(dl)
