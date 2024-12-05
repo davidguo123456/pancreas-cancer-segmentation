@@ -1,6 +1,7 @@
 import os
 import shutil
 import re
+from nnunetv2.dataset_conversion.generate_dataset_json import generate_dataset_json
 
 def organize_files(base_folder, dest_folder):
     # Define paths for the source folders
@@ -60,6 +61,18 @@ def organize_files(base_folder, dest_folder):
 
 if __name__ == "__main__":
     base_folder = "UHN-MedImg3D-ML-quiz"  # Adjust this path as needed
-    dest_folder = "nnUNet_raw/Dataset011_Pancreas"
+    dest_folder = "data/Dataset011_Pancreas"
     organize_files(base_folder, dest_folder)
+    generate_dataset_json(dest_folder,
+                          channel_names={0: 'CT'},
+                          labels={
+                            'background': 0,
+                            'pancreas': (1,2),
+                            'lesion': 2,
+                          },
+                          regions_class_order=(1,2),
+                          num_training_cases=252,
+                          file_ending='.nii.gz',
+                          overwrite_image_reader_writer='SimpleITKIO',
+                          )
 
