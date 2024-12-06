@@ -149,7 +149,7 @@ class nnUNetTrainer(object):
         self.oversample_foreground_percent = 0.33
         self.num_iterations_per_epoch = 250
         self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 1000
+        self.num_epochs = 200
         self.current_epoch = 0
         self.enable_deep_supervision = False
 
@@ -962,27 +962,35 @@ class nnUNetTrainer(object):
         else:
             target = target.to(self.device, non_blocking=True)
 
+        if isinstance(classTarget, list):
+            classTarget = [i.to(self.device, non_blocking=True) for i in classTarget]
+        else:
+            classTarget = classTarget.to(self.device, non_blocking=True)
+
         self.optimizer.zero_grad(set_to_none=True)
         # Autocast can be annoying
         # If the device_type is 'cpu' then it's slow as heck and needs to be disabled.
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
         with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
-            segOutput, classOutput = self.network(data)
+            output, classOutput = self.network(data)
             # del data
-            l = self.segLoss(segOutput, target) + self.classLoss(classOutput, classTarget)
+            l = self.segLoss(output, target)
+            cl = self.classLoss(classOutput, classTarget)
+            loss = l + cl
 
+        
         if self.grad_scaler is not None:
-            self.grad_scaler.scale(l).backward()
+            self.grad_scaler.scale(loss).backward()
             self.grad_scaler.unscale_(self.optimizer)
             torch.nn.utils.clip_grad_norm_(self.network.parameters(), 12)
             self.grad_scaler.step(self.optimizer)
             self.grad_scaler.update()
         else:
-            l.backward()
+            loss.backward()
             torch.nn.utils.clip_grad_norm_(self.network.parameters(), 12)
             self.optimizer.step()
-        return {'loss': l.detach().cpu().numpy()}
+        return {'loss': l.detach().cpu().numpy(), 'class_loss': cl.detach().cpu().numpy()}
 
     def on_train_epoch_end(self, train_outputs: List[dict]):
         outputs = collate_outputs(train_outputs)
@@ -993,8 +1001,11 @@ class nnUNetTrainer(object):
             loss_here = np.vstack(losses_tr).mean()
         else:
             loss_here = np.mean(outputs['loss'])
+            class_loss_here = np.mean(outputs['class_loss'])
 
         self.logger.log('train_losses', loss_here, self.current_epoch)
+        self.logger.log('train_class_losses', loss_here, self.current_epoch)
+
 
     def on_validation_epoch_start(self):
         self.network.eval()
@@ -1010,14 +1021,20 @@ class nnUNetTrainer(object):
         else:
             target = target.to(self.device, non_blocking=True)
 
+        if isinstance(classTarget, list):
+            classTarget = [i.to(self.device, non_blocking=True) for i in classTarget]
+        else:
+            classTarget = classTarget.to(self.device, non_blocking=True)
+
         # Autocast can be annoying
         # If the device_type is 'cpu' then it's slow as heck and needs to be disabled.
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
         with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
-            segOutput, classOutput = self.network(data)
+            output, classOutput = self.network(data)
             del data
-            l = self.segLoss(segOutput, target) + self.classLoss(classOutput, classTarget)
+            l = self.segLoss(output, target) 
+            cl = self.classLoss(classOutput, classTarget)
 
         # we only need the output with the highest output resolution (if DS enabled)
         if self.enable_deep_supervision:
@@ -1065,7 +1082,7 @@ class nnUNetTrainer(object):
             fp_hard = fp_hard[1:]
             fn_hard = fn_hard[1:]
 
-        return {'loss': l.detach().cpu().numpy(), 'tp_hard': tp_hard, 'fp_hard': fp_hard, 'fn_hard': fn_hard}
+        return {'loss': l.detach().cpu().numpy(), 'class_loss': cl.detach().cpu().numpy(), 'tp_hard': tp_hard, 'fp_hard': fp_hard, 'fn_hard': fn_hard}
 
     def on_validation_epoch_end(self, val_outputs: List[dict]):
         outputs_collated = collate_outputs(val_outputs)
@@ -1093,12 +1110,14 @@ class nnUNetTrainer(object):
             loss_here = np.vstack(losses_val).mean()
         else:
             loss_here = np.mean(outputs_collated['loss'])
+            class_loss_here = np.mean(outputs_collated['class_loss'])
 
         global_dc_per_class = [i for i in [2 * i / (2 * i + j + k) for i, j, k in zip(tp, fp, fn)]]
         mean_fg_dice = np.nanmean(global_dc_per_class)
         self.logger.log('mean_fg_dice', mean_fg_dice, self.current_epoch)
         self.logger.log('dice_per_class_or_region', global_dc_per_class, self.current_epoch)
         self.logger.log('val_losses', loss_here, self.current_epoch)
+        self.logger.log('val_class_losses', class_loss_here, self.current_epoch)
 
     def on_epoch_start(self):
         self.logger.log('epoch_start_timestamps', time(), self.current_epoch)

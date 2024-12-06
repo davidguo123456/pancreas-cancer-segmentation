@@ -72,8 +72,7 @@ class ResidualEncoderUNetWithClassifier(nn.Module):
 class EncoderClassifier(nn.Module):
     def __init__(self,
                  encoder: Union[PlainConvEncoder, ResidualEncoder],
-                 deep_supervision: bool = False,
-                 conv_bias: bool = None):
+                 deep_supervision: bool = False):
         """
         Simplified UNet decoder for 3-class classification.
         """
@@ -82,40 +81,20 @@ class EncoderClassifier(nn.Module):
         self.deep_supervision = deep_supervision
         self.encoder = encoder
         self.num_classes = 3  # Fixed to 3 for this decoder
+        self.init_size = self.encoder.output_channels[-1]
 
-        n_stages_encoder = len(encoder.output_channels)
+        self.model = nn.Sequential(
+            nn.Conv2d(self.init_size, 128, kernel_size=3, stride=1, padding=1),  # Output: [16, 128, 4, 6]
+            nn.ReLU(),
+            nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),   # Output: [16, 64, 4, 6]
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(64 * 4 * 6, 256),  # Flatten the feature map
+            nn.ReLU(),
+            nn.Linear(256, self.num_classes),
+        )
 
-        # Build decoder stages
-        self.transpconvs = nn.ModuleList()
-        self.stages = nn.ModuleList()
-        self.seg_layers = nn.ModuleList()
 
-        for s in range(1, n_stages_encoder):
-            input_features_below = encoder.output_channels[-s]
-            input_features_skip = encoder.output_channels[-(s + 1)]
-            stride_for_transpconv = encoder.strides[-s]
-
-            self.transpconvs.append(nn.ConvTranspose2d(
-                in_channels=input_features_below,
-                out_channels=input_features_skip,
-                kernel_size=stride_for_transpconv,
-                stride=stride_for_transpconv,
-                bias=conv_bias
-            ))
-
-            self.stages.append(nn.Sequential(
-                nn.Conv2d(2 * input_features_skip, input_features_skip, kernel_size=3, padding=1, bias=conv_bias),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(input_features_skip, input_features_skip, kernel_size=3, padding=1, bias=conv_bias),
-                nn.ReLU(inplace=True)
-            ))
-
-            self.seg_layers.append(nn.Conv2d(
-                in_channels=input_features_skip,
-                out_channels=self.num_classes,
-                kernel_size=1,
-                bias=True
-            ))
 
     def forward(self, skips):
         """
@@ -124,20 +103,4 @@ class EncoderClassifier(nn.Module):
         :return: Segmentation logits for 3 classes.
         """
         lres_input = skips[-1]
-        seg_outputs = []
-
-        for s in range(len(self.stages)):
-            x = self.transpconvs[s](lres_input)
-            x = torch.cat((x, skips[-(s + 2)]), dim=1)
-            x = self.stages[s](x)
-
-            if self.deep_supervision:
-                seg_outputs.append(self.seg_layers[s](x))
-            elif s == (len(self.stages) - 1):
-                seg_outputs.append(self.seg_layers[-1](x))
-
-            lres_input = x
-
-        seg_outputs = seg_outputs[::-1]  # Reverse to prioritize largest resolution
-        print(seg_outputs[0].shape)
-        return seg_outputs[0] if not self.deep_supervision else seg_outputs
+        return self.model(lres_input)

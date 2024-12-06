@@ -12,7 +12,7 @@ class nnUNetDataLoader2D(nnUNetDataLoaderBase):
         # preallocate memory for data and seg
         data_all = np.zeros(self.data_shape, dtype=np.float32)
         seg_all = np.zeros(self.seg_shape, dtype=np.int16)
-        class_all = np.zeros(self.seg_shape[:2], dtype=np.int16)
+        class_all = torch.empty((self.batch_size,3))
         case_properties = []
 
         for j, current_key in enumerate(selected_keys):
@@ -23,7 +23,9 @@ class nnUNetDataLoader2D(nnUNetDataLoaderBase):
             case_properties.append(properties)
 
             #note down classifier label
-            class_all[j] = int(current_key.split('_')[1])
+            idx = torch.tensor(int(current_key.split('_')[1]))
+            one_hot = torch.nn.functional.one_hot(idx, num_classes=3)
+            class_all[j] = one_hot
 
             # select a class/region first, then a slice where this class is present, then crop to that area
             if not force_fg:
