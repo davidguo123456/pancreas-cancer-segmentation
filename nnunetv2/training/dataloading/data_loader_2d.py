@@ -53,7 +53,7 @@ class nnUNetDataLoader2D(nnUNetDataLoaderBase):
                 selected_slice = np.random.choice(properties['class_locations'][selected_class_or_region][:, 1])
             else:
                 selected_slice = np.random.choice(len(data[0]))
-
+            
             data = data[:, selected_slice]
             seg = seg[:, selected_slice]
 

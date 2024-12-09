@@ -372,8 +372,7 @@ class nnUNetPredictor(object):
                     sleep(0.1)
                     proceed = not check_workers_alive_and_busy(export_pool, worker_list, r, allowed_num_queued=2)
 
-                prediction = self.predict_logits_from_preprocessed_data(data).cpu()
-
+                prediction, class_prediction = self.predict_logits_from_preprocessed_data(data).cpu()
                 if ofile is not None:
                     # this needs to go into background processes
                     # export_prediction_from_logits(prediction, properties, self.configuration_manager, self.plans_manager,
@@ -445,8 +444,7 @@ class nnUNetPredictor(object):
 
         if self.verbose:
             print('predicting')
-        predicted_logits = self.predict_logits_from_preprocessed_data(dct['data']).cpu()
-
+        predicted_logits, predicted_class_logits = self.predict_logits_from_preprocessed_data(dct['data']).cpu()
         if self.verbose:
             print('resampling to original shape')
         if output_file_truncated is not None:
@@ -489,16 +487,19 @@ class nnUNetPredictor(object):
             # second iteration to crash due to OOM. Grabbing that with try except cause way more bloated code than
             # this actually saves computation time
             if prediction is None:
-                prediction = self.predict_sliding_window_return_logits(data).to('cpu')
+                prediction, class_prediction = self.predict_sliding_window_return_logits(data).to('cpu')
             else:
-                prediction += self.predict_sliding_window_return_logits(data).to('cpu')
+                t_prediction, t_class_prediction = self.predict_sliding_window_return_logits(data).to('cpu')
+                prediction += t_prediction
+                class_prediction += t_class_prediction
 
         if len(self.list_of_parameters) > 1:
             prediction /= len(self.list_of_parameters)
+            class_prediction /= len(self.list_of_parameters)
 
         if self.verbose: print('Prediction done')
         torch.set_num_threads(n_threads)
-        return prediction
+        return prediction, class_prediction
 
     def _internal_get_sliding_window_slicers(self, image_size: Tuple[int, ...]):
         slicers = []
@@ -536,7 +537,7 @@ class nnUNetPredictor(object):
 
     def _internal_maybe_mirror_and_predict(self, x: torch.Tensor) -> torch.Tensor:
         mirror_axes = self.allowed_mirroring_axes if self.use_mirroring else None
-        prediction = self.network(x)
+        prediction, classPrediction = self.network(x)
 
         if mirror_axes is not None:
             # check for invalid numbers in mirror_axes
@@ -548,9 +549,10 @@ class nnUNetPredictor(object):
                 c for i in range(len(mirror_axes)) for c in itertools.combinations(mirror_axes, i + 1)
             ]
             for axes in axes_combinations:
-                prediction += torch.flip(self.network(torch.flip(x, axes)), axes)
+                a, b = self.network(torch.flip(x, axes))
+                prediction += torch.flip(a, axes)
             prediction /= (len(axes_combinations) + 1)
-        return prediction
+        return prediction, classPrediction
 
     def _internal_predict_sliding_window_return_logits(self,
                                                        data: torch.Tensor,
@@ -574,8 +576,9 @@ class nnUNetPredictor(object):
             predicted_logits = torch.zeros((self.label_manager.num_segmentation_heads, *data.shape[1:]),
                                            dtype=torch.half,
                                            device=results_device)
+            predicted_class_logits = torch.empty((0, 3), dtype=torch.half, device=results_device)
             n_predictions = torch.zeros(data.shape[1:], dtype=torch.half, device=results_device)
-
+            
             if self.use_gaussian:
                 gaussian = compute_gaussian(tuple(self.configuration_manager.patch_size), sigma_scale=1. / 8,
                                             value_scaling_factor=10,
@@ -588,12 +591,13 @@ class nnUNetPredictor(object):
             for sl in tqdm(slicers, disable=not self.allow_tqdm):
                 workon = data[sl][None]
                 workon = workon.to(self.device)
-
-                prediction = self._internal_maybe_mirror_and_predict(workon)[0].to(results_device)
-
+                prediction, class_prediction = self._internal_maybe_mirror_and_predict(workon)
+                prediction = prediction[0].to(results_device)
+                class_prediction = class_prediction.to(results_device)
                 if self.use_gaussian:
                     prediction *= gaussian
                 predicted_logits[sl] += prediction
+                predicted_class_logits = torch.cat((predicted_class_logits, class_prediction),dim=0)
                 n_predictions[sl[1:]] += gaussian
 
             predicted_logits /= n_predictions
@@ -603,11 +607,11 @@ class nnUNetPredictor(object):
                                    'reduce value_scaling_factor in compute_gaussian or increase the dtype of '
                                    'predicted_logits to fp32')
         except Exception as e:
-            del predicted_logits, n_predictions, prediction, gaussian, workon
+            del predicted_logits, predicted_class_logits, n_predictions, prediction, gaussian, workon
             empty_cache(self.device)
             empty_cache(results_device)
             raise e
-        return predicted_logits
+        return predicted_logits, predicted_class_logits
 
     def predict_sliding_window_return_logits(self, input_image: torch.Tensor) \
             -> Union[np.ndarray, torch.Tensor]:
@@ -642,21 +646,21 @@ class nnUNetPredictor(object):
                 if self.perform_everything_on_device and self.device != 'cpu':
                     # we need to try except here because we can run OOM in which case we need to fall back to CPU as a results device
                     try:
-                        predicted_logits = self._internal_predict_sliding_window_return_logits(data, slicers,
+                        predicted_logits, predicted_class_logits = self._internal_predict_sliding_window_return_logits(data, slicers,
                                                                                                self.perform_everything_on_device)
                     except RuntimeError:
                         print(
                             'Prediction on device was unsuccessful, probably due to a lack of memory. Moving results arrays to CPU')
                         empty_cache(self.device)
-                        predicted_logits = self._internal_predict_sliding_window_return_logits(data, slicers, False)
+                        predicted_logits, predicted_class_logits = self._internal_predict_sliding_window_return_logits(data, slicers, False)
                 else:
-                    predicted_logits = self._internal_predict_sliding_window_return_logits(data, slicers,
+                    predicted_logits, predicted_class_logits = self._internal_predict_sliding_window_return_logits(data, slicers,
                                                                                            self.perform_everything_on_device)
 
                 empty_cache(self.device)
                 # revert padding
                 predicted_logits = predicted_logits[(slice(None), *slicer_revert_padding[1:])]
-        return predicted_logits
+        return predicted_logits, predicted_class_logits
 
     def predict_from_files_sequential(self,
                            list_of_lists_or_source_folder: Union[str, List[List[str]]],
@@ -727,8 +731,7 @@ class nnUNetPredictor(object):
 
             print(f'perform_everything_on_device: {self.perform_everything_on_device}')
 
-            prediction = self.predict_logits_from_preprocessed_data(torch.from_numpy(data)).cpu()
-
+            prediction, class_prediction = self.predict_logits_from_preprocessed_data(torch.from_numpy(data)).cpu()
             if of is not None:
                 export_prediction_from_logits(prediction, data_properties, self.configuration_manager, self.plans_manager,
                   self.dataset_json, of, save_probabilities)

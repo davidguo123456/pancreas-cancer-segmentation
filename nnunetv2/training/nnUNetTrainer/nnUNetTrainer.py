@@ -1,3 +1,4 @@
+import csv
 import inspect
 import multiprocessing
 import os
@@ -149,7 +150,7 @@ class nnUNetTrainer(object):
         self.oversample_foreground_percent = 0.33
         self.num_iterations_per_epoch = 250
         self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 200
+        self.num_epochs = 60
         self.current_epoch = 0
         self.enable_deep_supervision = False
 
@@ -394,7 +395,11 @@ class nnUNetTrainer(object):
                             use_ignore_label=self.label_manager.ignore_label is not None,
                             dice_class=MemoryEfficientSoftDiceLoss)
 
-        classLoss = nn.CrossEntropyLoss()
+        classLoss = DC_and_BCE_loss({},
+                            {'batch_dice': self.configuration_manager.batch_dice,
+                            'do_bg': True, 'smooth': 1e-5, 'ddp': self.is_ddp},
+                            use_ignore_label=self.label_manager.ignore_label is not None,
+                            dice_class=MemoryEfficientSoftDiceLoss)
 
         return segLoss, classLoss
 
@@ -978,7 +983,6 @@ class nnUNetTrainer(object):
             l = self.segLoss(output, target)
             cl = self.classLoss(classOutput, classTarget)
             loss = l + cl
-
         
         if self.grad_scaler is not None:
             self.grad_scaler.scale(loss).backward()
@@ -1004,7 +1008,7 @@ class nnUNetTrainer(object):
             class_loss_here = np.mean(outputs['class_loss'])
 
         self.logger.log('train_losses', loss_here, self.current_epoch)
-        self.logger.log('train_class_losses', loss_here, self.current_epoch)
+        self.logger.log('train_class_losses', class_loss_here, self.current_epoch)
 
 
     def on_validation_epoch_start(self):
@@ -1225,7 +1229,7 @@ class nnUNetTrainer(object):
                                    "forward pass (where compile is triggered) already has deep supervision disabled. "
                                    "This is exactly what we need in perform_actual_validation")
 
-        predictor = nnUNetPredictor(tile_step_size=0.5, use_gaussian=True, use_mirroring=True,
+        predictor = nnUNetPredictor(tile_step_size=0.5, use_gaussian=True, use_mirroring=False,
                                     perform_everything_on_device=True, device=self.device, verbose=False,
                                     verbose_preprocessing=False, allow_tqdm=False)
         predictor.manual_initialization(self.network, self.plans_manager, self.configuration_manager, None,
@@ -1258,6 +1262,8 @@ class nnUNetTrainer(object):
 
             results = []
 
+            classResults = []
+
             for i, k in enumerate(dataset_val.keys()):
                 proceed = not check_workers_alive_and_busy(segmentation_export_pool, worker_list, results,
                                                            allowed_num_queued=2)
@@ -1280,8 +1286,16 @@ class nnUNetTrainer(object):
                 self.print_to_log_file(f'{k}, shape {data.shape}, rank {self.local_rank}')
                 output_filename_truncated = join(validation_output_folder, k)
 
-                prediction = predictor.predict_sliding_window_return_logits(data)
+                prediction, classPrediction = predictor.predict_sliding_window_return_logits(data)
                 prediction = prediction.cpu()
+
+                #softmax
+                t_classPredicton = torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]
+                t_classPrediction_max = torch.argmax(t_classPredicton)
+                classLabel = torch.tensor(int(k.split('_')[1]))
+                self.print_to_log_file(f'class {classLabel} predicted as class: {t_classPrediction_max}')
+
+                classResults.append([int(classLabel), int(t_classPrediction_max)])
 
                 # this needs to go into background processes
                 results.append(
@@ -1331,6 +1345,17 @@ class nnUNetTrainer(object):
                 # if we don't barrier from time to time we will get nccl timeouts for large datasets. Yuck.
                 if self.is_ddp and i < last_barrier_at_idx and (i + 1) % 20 == 0:
                     dist.barrier()
+                
+            # write classification results to a csv to save records
+            output_csv = join(self.output_folder, 'classification.csv')
+            with open(output_csv, "w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerows(classResults)
+            self.print_to_log_file(f'Wrote classification results to {output_csv}')
+            
+            classResults = np.array(classResults)
+            acc = (classResults.shape[0] - np.sum(classResults[:, 0] != classResults[:, 1])) / classResults.shape[0]
+            self.print_to_log_file(f'Classification Accuracy: {acc}')
 
             _ = [r.get() for r in results]
 

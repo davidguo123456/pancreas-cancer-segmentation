@@ -52,9 +52,10 @@ class ResidualEncoderUNetWithClassifier(nn.Module):
                                        return_skips=True, disable_default_stem=False, stem_channels=stem_channels)
         self.decoder = UNetDecoder(self.encoder, num_classes, n_conv_per_stage_decoder, deep_supervision)
 
-        self.classifier = EncoderClassifier(self.encoder, deep_supervision)
+        self.classifier = EncoderClassifier(self.encoder)
 
     def forward(self, x):
+        #task = 0 for decoder, 1 for classifier
         skips = self.encoder(x)
         return self.decoder(skips), self.classifier(skips)
 
@@ -70,31 +71,27 @@ class ResidualEncoderUNetWithClassifier(nn.Module):
         init_last_bn_before_add_to_0(module)
 
 class EncoderClassifier(nn.Module):
-    def __init__(self,
-                 encoder: Union[PlainConvEncoder, ResidualEncoder],
-                 deep_supervision: bool = False):
+    def __init__(self, encoder: Union[PlainConvEncoder, ResidualEncoder]):
         """
         Simplified UNet decoder for 3-class classification.
         """
-        super().__init__()
+        super(EncoderClassifier, self).__init__()
 
-        self.deep_supervision = deep_supervision
         self.encoder = encoder
         self.num_classes = 3  # Fixed to 3 for this decoder
         self.init_size = self.encoder.output_channels[-1]
 
         self.model = nn.Sequential(
-            nn.Conv2d(self.init_size, 128, kernel_size=3, stride=1, padding=1),  # Output: [16, 128, 4, 6]
-            nn.ReLU(),
-            nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),   # Output: [16, 64, 4, 6]
-            nn.ReLU(),
+            nn.Conv2d(self.init_size, 64, kernel_size=3),
+            nn.BatchNorm2d(64),
             nn.Flatten(),
-            nn.Linear(64 * 4 * 6, 256),  # Flatten the feature map
-            nn.ReLU(),
-            nn.Linear(256, self.num_classes),
+            nn.Linear(64 * ((4 - 2)) * ((6 - 2)), 32),
+            nn.BatchNorm1d(32),
+            nn.Dropout(p=0.5),
+            nn.Linear(32, self.num_classes),
+            nn.BatchNorm1d(self.num_classes),
+            nn.Dropout(p=0.3),
         )
-
-
 
     def forward(self, skips):
         """

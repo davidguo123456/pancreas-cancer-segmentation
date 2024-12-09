@@ -12,12 +12,18 @@ class nnUNetDataLoader3D(nnUNetDataLoaderBase):
         # preallocate memory for data and seg
         data_all = np.zeros(self.data_shape, dtype=np.float32)
         seg_all = np.zeros(self.seg_shape, dtype=np.int16)
+        class_all = torch.empty((self.batch_size,3))
         case_properties = []
 
         for j, i in enumerate(selected_keys):
             # oversampling foreground will improve stability of model training, especially if many patches are empty
             # (Lung for example)
             force_fg = self.get_do_oversample(j)
+
+            #note down classifier label
+            idx = torch.tensor(int(i.split('_')[1]))
+            one_hot = torch.nn.functional.one_hot(idx, num_classes=3)
+            class_all[j] = one_hot
 
             data, seg, properties = self._data.load_case(i)
             case_properties.append(properties)
@@ -67,10 +73,8 @@ class nnUNetDataLoader3D(nnUNetDataLoaderBase):
                     else:
                         seg_all = torch.stack(segs)
                     del segs, images
-
-            return {'data': data_all, 'target': seg_all, 'keys': selected_keys}
-
-        return {'data': data_all, 'target': seg_all, 'keys': selected_keys}
+            return {'data': data_all, 'target': seg_all, 'classTarget': class_all, 'keys': selected_keys}
+        return {'data': data_all, 'target': seg_all, 'classTarget': class_all, 'keys': selected_keys}
 
 
 if __name__ == '__main__':
