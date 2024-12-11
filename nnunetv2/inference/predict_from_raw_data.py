@@ -379,7 +379,6 @@ class nnUNetPredictor(object):
 
                 t_class_prediction = torch.softmax(class_prediction, dim=1).sum(dim=0) / class_prediction.shape[0]
                 t_class_prediction_max = torch.argmax(t_class_prediction)
-                classLabel = torch.tensor(int(os.path.basename(ofile).split('_')[1]))
                 classResults.append([str(os.path.basename(ofile)), int(t_class_prediction_max)])
 
                 if ofile is not None:
@@ -418,15 +417,11 @@ class nnUNetPredictor(object):
             ret = [i.get()[0] for i in r]
 
             # write classification results to a csv to save records
-            output_csv = join('validation_prediction', 'subtype_results.csv')
+            output_csv = join('prediction', 'subtype_results.csv')
             with open(output_csv, "w", newline="") as file:
                 writer = csv.writer(file)
                 writer.writerows(classResults)
             print(f'Wrote classification results to {output_csv}')
-            
-            classResults = np.array(classResults)
-            acc = (classResults.shape[0] - np.sum(classResults[:, 0] != classResults[:, 1])) / classResults.shape[0]
-            print(f'Classification Accuracy: {acc}')
 
         if isinstance(data_iterator, MultiThreadedAugmenter):
             data_iterator._finish()
