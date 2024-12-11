@@ -82,10 +82,8 @@ class EncoderClassifier(nn.Module):
         self.init_size = self.encoder.output_channels[-1]
 
         self.model = nn.Sequential(
-            nn.Conv2d(self.init_size, 64, kernel_size=3),
-            nn.BatchNorm2d(64),
             nn.Flatten(),
-            nn.Linear(64 * ((4 - 2)) * ((6 - 2)), 32),
+            nn.Linear(self.init_size * ((4 - 0)) * ((6 - 0)), 32),
             nn.BatchNorm1d(32),
             nn.Dropout(p=0.5),
             nn.Linear(32, self.num_classes),

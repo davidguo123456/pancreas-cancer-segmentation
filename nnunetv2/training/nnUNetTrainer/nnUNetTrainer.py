@@ -150,7 +150,7 @@ class nnUNetTrainer(object):
         self.oversample_foreground_percent = 0.33
         self.num_iterations_per_epoch = 250
         self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 60
+        self.num_epochs = 200
         self.current_epoch = 0
         self.enable_deep_supervision = False
 
@@ -187,7 +187,7 @@ class nnUNetTrainer(object):
         # self.configure_rotation_dummyDA_mirroring_and_inital_patch_size and will be saved in checkpoints
 
         ### checkpoint saving stuff
-        self.save_every = 50
+        self.save_every = 10
         self.disable_checkpointing = False
 
         ## DDP batch size and oversampling can differ between workers and needs adaptation
@@ -982,7 +982,7 @@ class nnUNetTrainer(object):
             # del data
             l = self.segLoss(output, target)
             cl = self.classLoss(classOutput, classTarget)
-            loss = l + cl
+            loss = l + 3 * cl
         
         if self.grad_scaler is not None:
             self.grad_scaler.scale(loss).backward()
@@ -1289,12 +1289,17 @@ class nnUNetTrainer(object):
                 prediction, classPrediction = predictor.predict_sliding_window_return_logits(data)
                 prediction = prediction.cpu()
 
-                #softmax
-                t_classPredicton = torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]
-                t_classPrediction_max = torch.argmax(t_classPredicton)
+                # softmax
+                t_classPrediction = torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]
+                t_classPrediction_max = torch.argmax(t_classPrediction)
                 classLabel = torch.tensor(int(k.split('_')[1]))
                 self.print_to_log_file(f'class {classLabel} predicted as class: {t_classPrediction_max}')
-
+                if classLabel != t_classPrediction_max: 
+                    print((classPrediction > 0).sum(dim=0) / classPrediction.shape[0]) # step func mean
+                    print(classPrediction.sum(dim=0) / classPrediction.shape[0]) # mean
+                    print((classPrediction * (classPrediction > 0)).sum(dim=0) / classPrediction.shape[0]) # ReLU mean
+                    print(torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]) # softmax mean
+                    print(torch.softmax(classPrediction, dim=1).prod(dim=0)) # softmax prob aggre
                 classResults.append([int(classLabel), int(t_classPrediction_max)])
 
                 # this needs to go into background processes
@@ -1347,7 +1352,7 @@ class nnUNetTrainer(object):
                     dist.barrier()
                 
             # write classification results to a csv to save records
-            output_csv = join(self.output_folder, 'classification.csv')
+            output_csv = join(self.output_folder, 'subtype_results.csv')
             with open(output_csv, "w", newline="") as file:
                 writer = csv.writer(file)
                 writer.writerows(classResults)

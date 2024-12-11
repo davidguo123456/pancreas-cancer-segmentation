@@ -5,6 +5,7 @@ import os
 from copy import deepcopy
 from time import sleep
 from typing import Tuple, Union, List, Optional
+import csv
 
 import numpy as np
 import torch
@@ -346,6 +347,7 @@ class nnUNetPredictor(object):
         If 'ofile' is None, the result will be returned instead of written to a file
         """
         with multiprocessing.get_context("spawn").Pool(num_processes_segmentation_export) as export_pool:
+            classResults = []
             worker_list = [i for i in export_pool._pool]
             r = []
             for preprocessed in data_iterator:
@@ -372,7 +374,14 @@ class nnUNetPredictor(object):
                     sleep(0.1)
                     proceed = not check_workers_alive_and_busy(export_pool, worker_list, r, allowed_num_queued=2)
 
-                prediction, class_prediction = self.predict_logits_from_preprocessed_data(data).cpu()
+                prediction, class_prediction = self.predict_logits_from_preprocessed_data(data)
+                prediction = prediction.cpu()
+
+                t_class_prediction = torch.softmax(class_prediction, dim=1).sum(dim=0) / class_prediction.shape[0]
+                t_class_prediction_max = torch.argmax(t_class_prediction)
+                classLabel = torch.tensor(int(os.path.basename(ofile).split('_')[1]))
+                classResults.append([str(os.path.basename(ofile)), int(t_class_prediction_max)])
+
                 if ofile is not None:
                     # this needs to go into background processes
                     # export_prediction_from_logits(prediction, properties, self.configuration_manager, self.plans_manager,
@@ -407,6 +416,17 @@ class nnUNetPredictor(object):
                 else:
                     print(f'\nDone with image of shape {data.shape}:')
             ret = [i.get()[0] for i in r]
+
+            # write classification results to a csv to save records
+            output_csv = join('validation_prediction', 'subtype_results.csv')
+            with open(output_csv, "w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerows(classResults)
+            print(f'Wrote classification results to {output_csv}')
+            
+            classResults = np.array(classResults)
+            acc = (classResults.shape[0] - np.sum(classResults[:, 0] != classResults[:, 1])) / classResults.shape[0]
+            print(f'Classification Accuracy: {acc}')
 
         if isinstance(data_iterator, MultiThreadedAugmenter):
             data_iterator._finish()
@@ -487,15 +507,18 @@ class nnUNetPredictor(object):
             # second iteration to crash due to OOM. Grabbing that with try except cause way more bloated code than
             # this actually saves computation time
             if prediction is None:
-                prediction, class_prediction = self.predict_sliding_window_return_logits(data).to('cpu')
+                prediction, class_prediction = self.predict_sliding_window_return_logits(data)
+                prediction = prediction.to('cpu')
+                class_prediction = class_prediction.to('cpu')
             else:
-                t_prediction, t_class_prediction = self.predict_sliding_window_return_logits(data).to('cpu')
+                t_prediction, t_class_prediction = self.predict_sliding_window_return_logits(data)
+                t_prediction = t_prediction.to('cpu')
+                t_class_prediction = t_class_prediction.to('cpu')
                 prediction += t_prediction
                 class_prediction += t_class_prediction
 
         if len(self.list_of_parameters) > 1:
             prediction /= len(self.list_of_parameters)
-            class_prediction /= len(self.list_of_parameters)
 
         if self.verbose: print('Prediction done')
         torch.set_num_threads(n_threads)

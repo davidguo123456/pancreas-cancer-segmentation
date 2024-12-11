@@ -53,7 +53,7 @@ def create_lists_from_splitted_dataset_folder(folder: str, file_ending: str, ide
     with Pool(processes=num_processes) as pool:
         list_of_lists = pool.starmap(create_paths_fn, params_list)
         
-    return list_of_lists
+    return [lst for lst in list_of_lists if lst]
 
 
 def get_filenames_of_train_images_and_targets(raw_dataset_folder: str, dataset_json: dict = None):
