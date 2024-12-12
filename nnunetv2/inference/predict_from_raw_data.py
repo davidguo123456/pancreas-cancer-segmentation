@@ -350,6 +350,7 @@ class nnUNetPredictor(object):
         """
         with multiprocessing.get_context("spawn").Pool(num_processes_segmentation_export) as export_pool:
             classResults = []
+            csvResults = []
             worker_list = [i for i in export_pool._pool]
             r = []
             for preprocessed in data_iterator:
@@ -383,6 +384,7 @@ class nnUNetPredictor(object):
                 t_class_prediction_max = torch.argmax(t_class_prediction)
                 class_label = torch.tensor(int(os.path.basename(ofile).split('_')[1]))
                 classResults.append([str(os.path.basename(ofile)), int(t_class_prediction_max), int(class_label), t_class_prediction])
+                csvResults.append([str(os.path.basename(ofile)), int(t_class_prediction_max)])
 
                 if ofile is not None:
                     # this needs to go into background processes
@@ -423,7 +425,13 @@ class nnUNetPredictor(object):
             output_pkl = join(output_folder, 'classification_results.pkl')
             with open(output_pkl, "wb") as file:
                 pickle.dump(classResults, file)
-            print(f'Wrote classification results to {output_pkl}')
+            print(f'Wrote classification results, logits, and labels, to {output_pkl}')
+
+            output_csv = join(output_folder, 'subtype_results.csv')
+            with open(output_csv, "w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerows(csvResults)
+            print(f'Wrote classification results to {output_csv}')
 
         if isinstance(data_iterator, MultiThreadedAugmenter):
             data_iterator._finish()

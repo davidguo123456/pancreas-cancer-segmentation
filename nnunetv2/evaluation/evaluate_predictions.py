@@ -171,12 +171,6 @@ def compute_classification_metrics(class_results_path: str):
 
     plot_confusion_matrix(predictions, target_classes)
 
-    output_csv = 'subtype_results.csv'
-    with open(output_csv, "w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerows(csv_results)
-    print(f'Wrote classification results to {output_csv}')
-
 
 
 
