@@ -1,15 +1,15 @@
 # Pancrease Cancer Segmentation and Classification with nnUNetV2
 
-This repository is an implementation
+This repository is an implementation of multi-task learning to add a classifier head to nnUNetv2's Residual Encoder preset.
 
 >Optional: include a graphic explaining your approach/main result, bibtex entry, link to demos, blog posts and tutorials
 
 ## Environments and Requirements
 
-- Windows/Ubuntu version
-- CPU, RAM, GPU information
-- CUDA version
-- python version
+- Ubuntu 20.04
+- Ryzen 7 5800X3d, 32GB RAM, RTX 3070 Ti 8GB
+- CUDA 12.5
+- Python 3.9.21
 
 To install requirements:
 
@@ -17,61 +17,74 @@ To install requirements:
 pip install -r requirements.txt
 ```
 
->Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc...
-
-
-
 ## Dataset
 
-- A link to download the data (if publicly available)
-- A description about how to prepare the data (e.g., folder structures)
+- Dataset consisted of 200-300 de-identified pancreas CT scans with segmentation annotations (pancreas and lesion) and
+lesion subtype annotations (three classes). The folder structure is given below:
+```
+├── train
+│   ├── subtype0
+│   │   ├── quiz_0_041.nii.gz # mask (0-background; 1-pancreas; 2-lesion)
+│   │   ├── quiz_0_041_0000.nii.gz # image
+│   │   ├── ...
+│   ├── subtype1
+│   └── subtype2
+└── validation
+│   └── subtype0
+│   │   ├── quiz_0_168.nii.gz # mask (0-background; 1-pancreas; 2-lesion)
+│   │   ├── quiz_0_168_0000.nii.gz # image
+│   │   ├── ...
+│   ├── subtype1
+│   └── subtype2
+├── test # only images are provided
+│   ├── quiz_037_0000.nii.gz
+│   ├── quiz_045_0000.nii.gz
+│   ├── quiz_047_0000.nii.gz
+│   ├── ...
+```
+
+Once you have the dataset in the correct configuration, you can run:
+
+```python
+python convert_dataset.py
+```
+This converts the dataset to a nnUNetv2 compatible format, and denotes it with dataset ID `011`
 
 ## Preprocessing
 
-A brief description of preprocessing method
-
-- cropping
-- intensity normalization
-- resampling
+Preprocessing adheres to the default conducted by nnUNetv2.
 
 Running the data preprocessing code:
 
 ```python
-python preprocessing.py --input_path <path_to_input_data> --output_path <path_to_output_data>
+nnUNetv2_plan_and_preprocess -d 011 -pl nnUNetPlannerResEncM 
 ```
 
 ## Training
 
-To train the model(s) in the paper, run this command:
+To train the model, run this command:
 
 ```train
-python train.py --input-data <path_to_data> --alpha 10 --beta 20
+nnUNetv2_train 011 2d FOLD -p nnUNetResEncUNetMPlans --npz
 ```
+Note that FOLD is one of [0, 1, 2, 3, 4, all], however it is reccomended to train folds [0, 1, 2, 3, 4] for better performance via ensembling:
 
->Describe how to train the models, with example commands, including the full training procedure and appropriate hyper-parameters.
-
-
-
-## Trained Models
-
-You can download trained models here:
-
-- [My awesome model](https://drive.google.com/mymodel.pth) trained on the above dataset with the above code. 
-
->Give a link to where/how the trained models can be downloaded.
-
-
+```
+nnUNetv2_train 011 2d 0 -p nnUNetResEncUNetMPlans --npz
+nnUNetv2_train 011 2d 1 -p nnUNetResEncUNetMPlans --npz
+nnUNetv2_train 011 2d 2 -p nnUNetResEncUNetMPlans --npz
+nnUNetv2_train 011 2d 3 -p nnUNetResEncUNetMPlans --npz
+nnUNetv2_train 011 2d 4 -p nnUNetResEncUNetMPlans --npz
+```
 
 ## Inference
 
-To infer the testing cases, run this command:
+To infer the test cases, run this command:
 
 ```python
-python inference.py --input-data <path_to_data> --model_path <path_to_trained_model> --output_path <path_to_output_data>
+nnUNetv2_predict -i data/Dataset011_Pancreas/valtemp -o <INFERENCE_OUTPUT_PATH> -d 011 -c 2d -p nnUNetResEncUNetMPlans
 ```
-
-> Describe how to infer on testing cases with the trained models.
-
+This will output classifier results to `subtype_results.csv` under `<INFERENCE_OUTPUT_PATH>`.
 
 
 ## Evaluation
@@ -79,11 +92,9 @@ python inference.py --input-data <path_to_data> --model_path <path_to_trained_mo
 To compute the evaluation metrics, run:
 
 ```eval
-python eval.py --seg_data <path_to_inference_results> --gt_data <path_to_ground_truth>
+nnUNetv2_evaluate_folder data/Dataset011_Pancreas/labelsVa <INFERENCE_OUTPUT_PATH> -djfile <INFERENCE_OUTPUT_PATH>/dataset.json -p <INFERENCE_OUTPUT_PATH>/plans.json
 ```
-
->Describe how to evaluate the inference results and obtain the reported results in the paper.
-
+This will output a `summary.json` under `<INFERENCE_OUTPUT_PATH>` for the segmentation model evaluation. Classifier evaluation results are printed to console.
 
 
 ## Results
