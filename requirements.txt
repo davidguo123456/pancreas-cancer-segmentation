@@ -15,7 +15,6 @@ scipy==1.14.1
 seaborn==0.13.2
 setuptools==75.6.0
 SimpleITK==2.4.0
-SimpleITK==2.4.0
 skimage==0.0
 threadpoolctl==3.5.0
 tifffile==2024.8.30
