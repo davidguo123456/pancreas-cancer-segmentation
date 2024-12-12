@@ -1,8 +1,6 @@
-# Pancrease Cancer Segmentation and Classification with nnUNetV2
+# Multi-task Pancrease Cancer Segmentation and Classification with nnUNetV2
 
 This repository is an implementation of multi-task learning to add a classifier head to nnUNetv2's Residual Encoder preset.
-
->Optional: include a graphic explaining your approach/main result, bibtex entry, link to demos, blog posts and tutorials
 
 ## Environments and Requirements
 
@@ -82,7 +80,7 @@ nnUNetv2_train 011 2d 4 -p nnUNetResEncUNetMPlans --npz
 To infer the test cases, run this command:
 
 ```python
-nnUNetv2_predict -i data/Dataset011_Pancreas/valtemp -o <INFERENCE_OUTPUT_PATH> -d 011 -c 2d -p nnUNetResEncUNetMPlans
+nnUNetv2_predict -i data/Dataset011_Pancreas/imagesVa -o <INFERENCE_OUTPUT_PATH> -d 011 -c 2d -p nnUNetResEncUNetMPlans
 ```
 This will output classifier results to `subtype_results.csv` under `<INFERENCE_OUTPUT_PATH>`.
 
@@ -99,10 +97,9 @@ This will output a `summary.json` under `<INFERENCE_OUTPUT_PATH>` for the segmen
 
 ## Results
 
-Our method achieves the following performance on [Brain Tumor Segmentation (BraTS) Challenge](https://www.med.upenn.edu/cbica/brats2020/)
+The proposed method achieves the following performance on the dataset.
 
-| Model name       |  DICE  | 95% Hausdorff Distance |
-| ---------------- | :----: | :--------------------: |
-| My awesome model | 90.68% |         32.71          |
+|  DICE  | Intersection over Union | Accuracy | F Beta | Average Precision | Brier Score |
+| :----: | :---------------------: |:--------:|:------:|:-----------------:|:-----------:|
+| 45.75% |         0.3576          |  88.89%  | .8861  |      92.43%       |   0.0646    |
 
->Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it.
