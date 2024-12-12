@@ -166,3 +166,5 @@ data*
 !nnunetv2
 process.ipynb
 validation*
+*.png
+*.csv

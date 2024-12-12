@@ -3,6 +3,7 @@ import itertools
 import multiprocessing
 import os
 from copy import deepcopy
+import pickle
 from time import sleep
 from typing import Tuple, Union, List, Optional
 import csv
@@ -256,7 +257,7 @@ class nnUNetPredictor(object):
                                                                                  output_filename_truncated,
                                                                                  num_processes_preprocessing)
 
-        return self.predict_from_data_iterator(data_iterator, save_probabilities, num_processes_segmentation_export)
+        return self.predict_from_data_iterator(data_iterator, output_folder_or_list_of_truncated_output_files, save_probabilities, num_processes_segmentation_export )
 
     def _internal_get_data_iterator_from_lists_of_filenames(self,
                                                             input_list_of_lists: List[List[str]],
@@ -340,6 +341,7 @@ class nnUNetPredictor(object):
 
     def predict_from_data_iterator(self,
                                    data_iterator,
+                                   output_folder,
                                    save_probabilities: bool = False,
                                    num_processes_segmentation_export: int = default_num_processes):
         """
@@ -379,7 +381,8 @@ class nnUNetPredictor(object):
 
                 t_class_prediction = torch.softmax(class_prediction, dim=1).sum(dim=0) / class_prediction.shape[0]
                 t_class_prediction_max = torch.argmax(t_class_prediction)
-                classResults.append([str(os.path.basename(ofile)), int(t_class_prediction_max)])
+                class_label = torch.tensor(int(os.path.basename(ofile).split('_')[1]))
+                classResults.append([str(os.path.basename(ofile)), int(t_class_prediction_max), int(class_label), t_class_prediction])
 
                 if ofile is not None:
                     # this needs to go into background processes
@@ -417,11 +420,10 @@ class nnUNetPredictor(object):
             ret = [i.get()[0] for i in r]
 
             # write classification results to a csv to save records
-            output_csv = join('prediction', 'subtype_results.csv')
-            with open(output_csv, "w", newline="") as file:
-                writer = csv.writer(file)
-                writer.writerows(classResults)
-            print(f'Wrote classification results to {output_csv}')
+            output_pkl = join(output_folder, 'classification_results.pkl')
+            with open(output_pkl, "wb") as file:
+                pickle.dump(classResults, file)
+            print(f'Wrote classification results to {output_pkl}')
 
         if isinstance(data_iterator, MultiThreadedAugmenter):
             data_iterator._finish()

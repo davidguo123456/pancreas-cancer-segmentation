@@ -35,6 +35,22 @@ def organize_files(base_folder, dest_folder):
                         os.path.join(dest_labels_tr, file)
                     )
 
+    # Move validation images and labels
+    for subtype in os.listdir(validation_path):
+        subtype_path = os.path.join(validation_path, subtype)
+        if os.path.isdir(subtype_path):
+            for file in os.listdir(subtype_path):
+                if re.search(r"_\d{4}\.nii\.gz$", file):
+                    shutil.move(
+                        os.path.join(subtype_path, file),
+                        os.path.join(dest_images_tv, file)
+                    )
+                elif file.endswith(".nii.gz") and not file.endswith("_\d{4}.nii.gz"):
+                    shutil.move(
+                        os.path.join(subtype_path, file),
+                        os.path.join(dest_labels_tv, file)
+                    )
+
     # Move test images
     for file in os.listdir(test_path):
         if re.search(r"_\d{4}\.nii\.gz$", file):

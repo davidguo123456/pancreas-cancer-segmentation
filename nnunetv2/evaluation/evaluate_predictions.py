@@ -1,8 +1,15 @@
+import csv
 import multiprocessing
 import os
 from copy import deepcopy
 from multiprocessing import Pool
+import pickle
 from typing import Tuple, List, Union, Optional
+from matplotlib import pyplot as plt
+import torch
+import torch.nn.functional as F
+from sklearn.metrics import fbeta_score, average_precision_score
+import pandas as pd
 
 import numpy as np
 from batchgenerators.utilities.file_and_folder_operations import subfiles, join, save_json, load_json, \
@@ -85,6 +92,93 @@ def compute_tp_fp_fn_tn(mask_ref: np.ndarray, mask_pred: np.ndarray, ignore_mask
     tn = np.sum(((~mask_ref) & (~mask_pred)) & use_mask)
     return tp, fp, fn, tn
 
+def compute_accuracy(predictions, target_classes):
+    predicted_classes = predictions.argmax(dim=1)
+    correct = (predicted_classes == target_classes).sum().item()
+    accuracy = correct / len(target_classes)
+    return accuracy
+
+def compute_fbeta(predictions, target_classes, beta=1.0):
+    predicted_classes = predictions.argmax(dim=1).cpu().numpy()
+    true_classes = target_classes.cpu().numpy()
+    fbeta = fbeta_score(true_classes, predicted_classes, average='macro', beta=beta)
+    return fbeta
+
+def compute_average_precision(predictions, target):
+    predictions_np = predictions.cpu().numpy()
+    target_np = target.cpu().numpy()
+    avg_precision = average_precision_score(target_np, predictions_np, average='macro')
+    return avg_precision
+
+def compute_brier_score(predictions, target):
+    brier = ((predictions - target) ** 2).mean().item()
+    return brier
+
+def plot_confusion_matrix(predictions, target_classes):
+
+    classes = predictions.shape[1]
+    predicted_classes = predictions.argmax(dim=1)
+    target_classes = target_classes
+
+    confusion = np.zeros((classes, classes))
+    for i in range(target_classes.shape[0]):
+        true = target_classes.data[i]
+        pred = predicted_classes.data[i]
+        confusion[pred][true] += 1
+    
+    plt.matshow(confusion, cmap='cividis')
+    for i, j in zip(*confusion.nonzero()):
+        plt.text(j, i, confusion[i,j], color='white', ha='center', va='center')
+    plt.xlabel("True Class")
+    plt.ylabel("Predicted Class")
+    plt.title("Confusion Matrix")
+    plt.savefig('confusion_matrix.png')
+    
+
+
+
+
+def compute_classification_metrics(class_results_path: str):
+    with open(class_results_path, 'rb') as file:
+        class_results = pickle.load(file)
+    print(f"Data loaded from {class_results_path}")
+
+    predictions = []
+    targets = []
+    target_classes = []
+    csv_results = []
+
+    for result in class_results:
+        filename, predicted_class, true_class, t_class_prediction = result
+        predictions.append(t_class_prediction)
+        target_classes.append(true_class)
+        targets.append(torch.nn.functional.one_hot(torch.tensor(true_class), num_classes=3))
+        csv_results.append([filename, predicted_class])
+        
+
+    predictions = torch.stack(predictions)
+    targets = torch.stack(targets)
+    target_classes = torch.tensor(target_classes)
+
+    accuracy = compute_accuracy(predictions, target_classes)
+    print(f'Accuracy: {accuracy}')
+    fbeta = compute_fbeta(predictions, target_classes, beta=1.0)
+    print(f'F Beta: {fbeta}')
+    avg_precision = compute_average_precision(predictions, targets)
+    print(f'Average Precision: {avg_precision}')
+    brier_score = compute_brier_score(predictions, targets)
+    print(f'Brier Score: {brier_score}')
+
+    plot_confusion_matrix(predictions, target_classes)
+
+    output_csv = 'subtype_results.csv'
+    with open(output_csv, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerows(csv_results)
+    print(f'Wrote classification results to {output_csv}')
+
+
+
 
 def compute_metrics(reference_file: str, prediction_file: str, image_reader_writer: BaseReaderWriter,
                     labels_or_regions: Union[List[int], List[Union[int, Tuple[int, ...]]]],
@@ -146,6 +240,8 @@ def compute_metrics_on_folder(folder_ref: str, folder_pred: str, output_file: st
             list(zip(files_ref, files_pred, [image_reader_writer] * len(files_pred), [regions_or_labels] * len(files_pred),
                      [ignore_label] * len(files_pred)))
         )
+    class_results_path = os.path.join(folder_pred, 'classification_results.pkl')
+    compute_classification_metrics(class_results_path)
 
     # mean metric per class
     metric_list = list(results[0]['metrics'][regions_or_labels[0]].keys())
