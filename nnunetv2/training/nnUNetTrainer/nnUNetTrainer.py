@@ -396,6 +396,7 @@ class nnUNetTrainer(object):
                             use_ignore_label=self.label_manager.ignore_label is not None,
                             dice_class=MemoryEfficientSoftDiceLoss)
 
+        # We are actually going to use this loss instead of just BCEWithLogitsLoss because it performs better
         classLoss = DC_and_BCE_loss({},
                             {'batch_dice': self.configuration_manager.batch_dice,
                             'do_bg': True, 'smooth': 1e-5, 'ddp': self.is_ddp},
