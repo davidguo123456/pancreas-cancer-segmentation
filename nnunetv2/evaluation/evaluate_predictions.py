@@ -156,9 +156,9 @@ def compute_classification_metrics(class_results_path: str):
         csv_results.append([filename, predicted_class])
         
 
-    predictions = torch.stack(predictions)
-    targets = torch.stack(targets)
-    target_classes = torch.tensor(target_classes)
+    predictions = torch.stack(predictions).cpu()
+    targets = torch.stack(targets).cpu()
+    target_classes = torch.tensor(target_classes).cpu()
 
     accuracy = compute_accuracy(predictions, target_classes)
     print(f'Accuracy: {accuracy}')

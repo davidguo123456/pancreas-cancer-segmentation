@@ -9,6 +9,7 @@ from copy import deepcopy
 from datetime import datetime
 from time import time, sleep
 from typing import Tuple, Union, List
+import pickle
 
 import numpy as np
 import torch
@@ -1263,7 +1264,8 @@ class nnUNetTrainer(object):
             results = []
 
             classResults = []
-
+            csvResults = []
+            
             for i, k in enumerate(dataset_val.keys()):
                 proceed = not check_workers_alive_and_busy(segmentation_export_pool, worker_list, results,
                                                            allowed_num_queued=2)
@@ -1290,17 +1292,18 @@ class nnUNetTrainer(object):
                 prediction = prediction.cpu()
 
                 # softmax
-                t_classPrediction = torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]
-                t_classPrediction_max = torch.argmax(t_classPrediction)
-                classLabel = torch.tensor(int(k.split('_')[1]))
-                self.print_to_log_file(f'class {classLabel} predicted as class: {t_classPrediction_max}')
-                if classLabel != t_classPrediction_max: 
+                t_class_prediction = torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]
+                t_class_prediction_max = torch.argmax(t_class_prediction)
+                class_label = torch.tensor(int(k.split('_')[1]))
+                self.print_to_log_file(f'class {class_label} predicted as class: {t_class_prediction_max}')
+                if class_label != t_class_prediction_max: 
                     print((classPrediction > 0).sum(dim=0) / classPrediction.shape[0]) # step func mean
                     print(classPrediction.sum(dim=0) / classPrediction.shape[0]) # mean
                     print((classPrediction * (classPrediction > 0)).sum(dim=0) / classPrediction.shape[0]) # ReLU mean
                     print(torch.softmax(classPrediction, dim=1).sum(dim=0) / classPrediction.shape[0]) # softmax mean
                     print(torch.softmax(classPrediction, dim=1).prod(dim=0)) # softmax prob aggre
-                classResults.append([int(classLabel), int(t_classPrediction_max)])
+                classResults.append([str(k), int(t_class_prediction_max), int(class_label), t_class_prediction])
+                csvResults.append([str(k), int(t_class_prediction_max)])
 
                 # this needs to go into background processes
                 results.append(
@@ -1350,17 +1353,19 @@ class nnUNetTrainer(object):
                 # if we don't barrier from time to time we will get nccl timeouts for large datasets. Yuck.
                 if self.is_ddp and i < last_barrier_at_idx and (i + 1) % 20 == 0:
                     dist.barrier()
+
+            # write classification results to a csv to save records
+            output_pkl = join(self.output_folder, 'validation/classification_results.pkl')
+            with open(output_pkl, "wb") as file:
+                pickle.dump(classResults, file)
+            print(f'Wrote classification results, logits, and labels, to {output_pkl}')
                 
             # write classification results to a csv to save records
             output_csv = join(self.output_folder, 'subtype_results.csv')
             with open(output_csv, "w", newline="") as file:
                 writer = csv.writer(file)
-                writer.writerows(classResults)
+                writer.writerows(csvResults)
             self.print_to_log_file(f'Wrote classification results to {output_csv}')
-            
-            classResults = np.array(classResults)
-            acc = (classResults.shape[0] - np.sum(classResults[:, 0] != classResults[:, 1])) / classResults.shape[0]
-            self.print_to_log_file(f'Classification Accuracy: {acc}')
 
             _ = [r.get() for r in results]
 
