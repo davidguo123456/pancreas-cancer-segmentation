@@ -101,5 +101,5 @@ The proposed method achieves the following performance on the dataset.
 
 |  DICE  | Intersection over Union | Accuracy | F Beta | Average Precision | Brier Score |
 | :----: | :---------------------: |:--------:|:------:|:-----------------:|:-----------:|
-| 45.75% |         0.3576          |  88.89%  | .8861  |      92.43%       |   0.0646    |
+| 45.57% |         0.3544          |  91.67%  | .9105  |      89.29%       |   0.0734    |
 
