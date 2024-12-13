@@ -82,19 +82,23 @@ class EncoderClassifier(nn.Module):
         self.init_size = self.encoder.output_channels[-1]
 
         self.model = nn.Sequential(
+            # 2 conv
             nn.Conv2d(self.init_size, 128, kernel_size=3, stride=1, padding=1),  # Output: [16, 128, 4, 6]
             nn.BatchNorm1d(128),
             nn.ReLU(),
+            # 1 conv
             nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),   # Output: [16, 64, 4, 6]
             nn.BatchNorm1d(64),
             nn.ReLU(),
+            # no conv
             nn.Flatten(),
             nn.Linear(64 * ((4 - 0)) * ((6 - 0)), 32),
-            nn.BatchNorm1d(32),
+            nn.BatchNorm1d(32), # no bn
             nn.ReLU(),
             nn.Dropout(p=0.2),
+            # 1 fc
             nn.Linear(32, self.num_classes),
-            nn.BatchNorm1d(self.num_classes),
+            nn.BatchNorm1d(self.num_classes), # no bn
         )
 
     def forward(self, skips):
