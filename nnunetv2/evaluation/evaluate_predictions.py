@@ -114,7 +114,8 @@ def compute_brier_score(predictions, target):
     brier = ((predictions - target) ** 2).mean().item()
     return brier
 
-def plot_confusion_matrix(predictions, target_classes):
+def plot_confusion_matrix(folder_pred, predictions, target_classes):
+    output_png = os.path.join(folder_pred, 'confusion_matrix.png')
 
     classes = predictions.shape[1]
     predicted_classes = predictions.argmax(dim=1)
@@ -132,13 +133,15 @@ def plot_confusion_matrix(predictions, target_classes):
     plt.xlabel("True Class")
     plt.ylabel("Predicted Class")
     plt.title("Confusion Matrix")
-    plt.savefig('confusion_matrix.png')
+    plt.savefig(output_png)
     
 
 
 
 
-def compute_classification_metrics(class_results_path: str):
+def compute_classification_metrics(folder_pred: str):
+    class_results_path = os.path.join(folder_pred, 'classification_results.pkl')
+
     with open(class_results_path, 'rb') as file:
         class_results = pickle.load(file)
     print(f"Data loaded from {class_results_path}")
@@ -169,7 +172,7 @@ def compute_classification_metrics(class_results_path: str):
     brier_score = compute_brier_score(predictions, targets)
     print(f'Brier Score: {brier_score}')
 
-    plot_confusion_matrix(predictions, target_classes)
+    plot_confusion_matrix(folder_pred, predictions, target_classes)
 
 
 
@@ -234,8 +237,7 @@ def compute_metrics_on_folder(folder_ref: str, folder_pred: str, output_file: st
             list(zip(files_ref, files_pred, [image_reader_writer] * len(files_pred), [regions_or_labels] * len(files_pred),
                      [ignore_label] * len(files_pred)))
         )
-    class_results_path = os.path.join(folder_pred, 'classification_results.pkl')
-    compute_classification_metrics(class_results_path)
+    compute_classification_metrics(folder_pred)
 
     # mean metric per class
     metric_list = list(results[0]['metrics'][regions_or_labels[0]].keys())
