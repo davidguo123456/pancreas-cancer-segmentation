@@ -84,11 +84,11 @@ class EncoderClassifier(nn.Module):
         self.model = nn.Sequential(
             # 2 conv
             nn.Conv2d(self.init_size, 128, kernel_size=2, stride=1, padding=1),  # Output: [16, 128, 4, 6]
-            nn.BatchNorm1d(128),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
             # 1 conv
             nn.Conv2d(128, 64, kernel_size=2, stride=1, padding=1),   # Output: [16, 64, 4, 6]
-            nn.BatchNorm1d(64),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
             # no conv
             nn.Flatten(),
