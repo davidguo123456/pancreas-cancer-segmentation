@@ -1,6 +1,6 @@
-# Multi-task Pancrease Cancer Segmentation and Classification with nnUNetV2
+# Multi-task Pancreas Cancer Segmentation and Classification with nnUNetV2
 
-This repository is an implementation of multi-task learning to add a classifier head to nnUNetv2's Residual Encoder preset.
+This repository implements multi-task learning to add a classifier head to nnUNetv2's Residual Encoder preset.
 
 ## Environments and Requirements
 
