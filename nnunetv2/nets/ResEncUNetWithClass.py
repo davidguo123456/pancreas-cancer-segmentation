@@ -85,10 +85,10 @@ class EncoderClassifier(nn.Module):
             nn.Flatten(),
             nn.Linear(self.init_size * ((4 - 0)) * ((6 - 0)), 32),
             nn.BatchNorm1d(32),
+            nn.ReLU(),
             nn.Dropout(p=0.2),
             nn.Linear(32, self.num_classes),
             nn.BatchNorm1d(self.num_classes),
-            nn.Dropout(p=0.1),
         )
 
     def forward(self, skips):
