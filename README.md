@@ -1,4 +1,4 @@
-# Multi-task Pancreas Cancer Segmentation and Classification with nnUNetV2
+# Multi-task Pancreas Cancer Segmentation and Classification with nnU-Net V2
 
 This repository implements multi-task learning to add a classifier head to nnUNetv2's Residual Encoder preset.
 
@@ -101,5 +101,5 @@ The proposed method achieves the following performance on the dataset.
 
 |  DICE  | Intersection over Union | Accuracy | F Beta | Average Precision | Brier Score |
 | :----: | :---------------------: |:--------:|:------:|:-----------------:|:-----------:|
-| 45.57% |         0.3544          |  91.67%  | .9105  |      89.29%       |   0.0734    |
+| 45.21% |         0.3503          |  88.88%  | .8861  |      90.95%       |   0.0652    |
 
