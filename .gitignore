@@ -167,4 +167,8 @@ data*
 process.ipynb
 validation*
 *.png
-*.csv
+*.nii.gz*
+*.pkl
+plans.json
+predict*
+!test_prediction/subtype_results.csv
