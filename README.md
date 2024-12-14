@@ -80,7 +80,7 @@ nnUNetv2_train 011 2d 4 -p nnUNetResEncUNetMPlans --npz
 To infer the test cases, run this command:
 
 ```python
-nnUNetv2_predict -i data/Dataset011_Pancreas/imagesVa -o <INFERENCE_OUTPUT_PATH> -d 011 -c 2d -p nnUNetResEncUNetMPlans
+nnUNetv2_predict -i data/Dataset011_Pancreas/<TEST_IMAGES_FOLDER> -o <INFERENCE_OUTPUT_PATH> -d 011 -c 2d -p nnUNetResEncUNetMPlans
 ```
 This will output classifier results to `subtype_results.csv` under `<INFERENCE_OUTPUT_PATH>`.
 
@@ -90,7 +90,7 @@ This will output classifier results to `subtype_results.csv` under `<INFERENCE_O
 To compute the evaluation metrics, run:
 
 ```eval
-nnUNetv2_evaluate_folder data/Dataset011_Pancreas/labelsVa <INFERENCE_OUTPUT_PATH> -djfile <INFERENCE_OUTPUT_PATH>/dataset.json -p <INFERENCE_OUTPUT_PATH>/plans.json
+nnUNetv2_evaluate_folder data/Dataset011_Pancreas/<TEST_LABELS_FOLDER> <INFERENCE_OUTPUT_PATH> -djfile <INFERENCE_OUTPUT_PATH>/dataset.json -p <INFERENCE_OUTPUT_PATH>/plans.json
 ```
 This will output a `summary.json` under `<INFERENCE_OUTPUT_PATH>` for the segmentation model evaluation. Classifier evaluation results are printed to console.
 
