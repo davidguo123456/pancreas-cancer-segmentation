@@ -984,7 +984,7 @@ class nnUNetTrainer(object):
             # del data
             l = self.segLoss(output, target)
             cl = self.classLoss(classOutput, classTarget)
-            loss = l + .5 * cl
+            loss = l + 3 * cl
         
         if self.grad_scaler is not None:
             self.grad_scaler.scale(loss).backward()
