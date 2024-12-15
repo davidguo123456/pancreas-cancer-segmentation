@@ -13,7 +13,7 @@ To install:
 
 ```setup
 pip install -r requirements.txt
-gh repo clone davidguo123456/pancreas-cancer-segmentation
+gh clone davidguo123456/pancreas-cancer-segmentation
 cd pancreas-cancer-segmentation
 pip install -e .
 ```
