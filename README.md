@@ -5,9 +5,10 @@ This repository implements multi-task learning to add a classifier head to nnUNe
 ## Environments and Requirements
 
 - Ubuntu 20.04
-- Ryzen 7 5800X3d, 32GB RAM, RTX 3070 Ti 8GB
 - CUDA 12.5
 - Python 3.9.21
+
+Training was conducted on a Ryzen 7 5800X3d, 32GB RAM, RTX 3070 Ti 8GB system, however anything with more than 8gb VRAM and is CUDA compatible should work.
 
 To install:
 
