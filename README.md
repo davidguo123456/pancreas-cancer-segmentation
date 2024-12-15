@@ -9,11 +9,15 @@ This repository implements multi-task learning to add a classifier head to nnUNe
 - CUDA 12.5
 - Python 3.9.21
 
-To install requirements:
+To install:
 
 ```setup
 pip install -r requirements.txt
+gh repo clone davidguo123456/pancreas-cancer-segmentation
+cd pancreas-cancer-segmentation
+pip install -e .
 ```
+
 
 ## Dataset
 
