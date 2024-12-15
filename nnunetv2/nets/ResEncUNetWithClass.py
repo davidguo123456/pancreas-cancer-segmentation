@@ -89,6 +89,7 @@ class EncoderClassifier(nn.Module):
             nn.Dropout(p=0.2),
             nn.Linear(32, self.num_classes),
             nn.BatchNorm1d(self.num_classes),
+            nn.Dropout(p=0.1),
         )
 
     def forward(self, skips):
