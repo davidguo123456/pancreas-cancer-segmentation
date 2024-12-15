@@ -13,6 +13,9 @@ To install requirements:
 
 ```setup
 pip install -r requirements.txt
+git clone https://github.com/davidguo123456/pancreas-cancer-segmentation.git
+cd pancreas-cancer-segmentation
+pip install -e .
 ```
 
 ## Dataset
