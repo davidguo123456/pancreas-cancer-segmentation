@@ -114,7 +114,7 @@ The proposed method achieves the following performance on the dataset.
 ## Contributing
 This repository is licensed with Apahce 2.0. It is not currently accepting contributions.
 
-## Acknowledgement
+## Acknowledgements
 We thank the authors of [nnU-Net](https://github.com/MIC-DKFZ/nnUNet) for open-sourcing their invaluable work.
 
 
