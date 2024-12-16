@@ -2,23 +2,29 @@
 
 This repository implements multi-task learning to add a classifier head to nnUNetv2's Residual Encoder preset.
 
+![ml drawio (6)](https://github.com/user-attachments/assets/ea1a7986-80ca-412a-983a-078d3ff2bbeb)
+
 ## Environments and Requirements
 
 - Ubuntu 20.04
-- Ryzen 7 5800X3d, 32GB RAM, RTX 3070 Ti 8GB
 - CUDA 12.5
 - Python 3.9.21
 
-To install requirements:
+Training was conducted on a Ryzen 7 5800X3d, 32GB RAM, RTX 3070 Ti 8GB system, however anything with more than 8gb VRAM and is CUDA compatible should work.
+
+To install:
 
 ```setup
 pip install -r requirements.txt
+git clone https://github.com/davidguo123456/pancreas-cancer-segmentation.git
+cd pancreas-cancer-segmentation
+pip install -e .
 ```
 
 ## Dataset
 
-- Dataset consisted of 200-300 de-identified pancreas CT scans with segmentation annotations (pancreas and lesion) and
-lesion subtype annotations (three classes). The folder structure is given below:
+- Dataset consisted of ~300 de-identified pancreas CT scans with segmentation annotations (pancreas and lesion) and
+lesion subtype annotations (three classes). It is unfortunately not publicly available. The folder structure is given below:
 ```
 ├── train
 │   ├── subtype0
@@ -104,4 +110,11 @@ The proposed method achieves the following performance on the dataset.
 |  DICE  | Intersection over Union | Accuracy | F Beta | Average Precision | Brier Score |
 | :----: | :---------------------: |:--------:|:------:|:-----------------:|:-----------:|
 | 45.36% |         0.3520          |  91.17%  | .9105  |      92.58%       |   0.0611    |
+
+## Contributing
+This repository is licensed with Apahce 2.0. It is not currently accepting contributions.
+
+## Acknowledgements
+We thank the authors of [nnU-Net](https://github.com/MIC-DKFZ/nnUNet) for open-sourcing their invaluable work.
+
 
